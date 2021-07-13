@@ -4,7 +4,18 @@
 \alias{calcBFASTrec}
 \title{Post-disturbance slope and recovery metrics derived from BFAST0n trend segments. The calcBFASTrec function derives a set of recovery indicators after fitting a segmented trend in the time series. Using the breakpoints function of the strucchange package, a segmented trend is fitted (hereafter called BFAST0n trend segments). The detected break showing the largest change (in absolute values) is assumed to represent the disturbance. Using the segmented trend and detected disturbance date, the RRI, R80p, YrYr and the slope of the post-disturbance trend segment are derived as recovery indicators.}
 \usage{
-calcBFASTrec(tsio, obspyr, h, nPre, nDist, nPostMin, nPostMax, seas = F)
+calcBFASTrec(
+  tsio,
+  obspyr,
+  h,
+  nPre,
+  nDist,
+  nPost,
+  nPostStart,
+  nDelta,
+  nDeltaStart,
+  seas = F
+)
 }
 \arguments{
 \item{tsio}{vector of observations (time series)}
@@ -17,11 +28,11 @@ calcBFASTrec(tsio, obspyr, h, nPre, nDist, nPostMin, nPostMax, seas = F)
 
 \item{nDist}{number of months used to quantify the time series value during the disturbance}
 
+\item{seas}{TRUE or FALSE, include seasonal term when detecting breaks?}
+
 \item{nPostMin}{min number of years after the disturbance used to quantify the recovery}
 
 \item{nPostMax}{max number of years after the disturbance used to quantify the recovery}
-
-\item{seas}{TRUE or FALSE, include seasonal term when detecting breaks?}
 
 \item{breaks}{'BIC' or 'LWZ': criteria used to define the optimal number of breaks (desactivated)}
 }

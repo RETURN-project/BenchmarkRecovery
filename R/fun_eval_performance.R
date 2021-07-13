@@ -155,6 +155,7 @@ plotMet <- function(data, xlbl, ylbl){
   ggplot(data, aes(Metric, value,color=Metric))+
     geom_boxplot(outlier.colour="black", outlier.shape=16,outlier.size=2, notch=T, lwd=2.5)+
     scale_color_discrete_qualitative(palette = 'Dark 3', name = 'Metric', guide=FALSE)+
+    # + scale_y_continuous(labels = function(x) format(x, scientific = TRUE))
     scale_y_continuous(trans='log2',labels=scaleFUN)+
     xlab(xlbl) +
     ylab(ylbl)+
@@ -167,7 +168,7 @@ plotMet <- function(data, xlbl, ylbl){
 #' @export
 #'
 scaleFUN <- function(x){
-  sprintf(paste0("%.3f"), x)
+  formatC(x, format = "e", digits = 2)#format(x, scientific = TRUE)#sprintf(paste0("%.3f"), x)
 }
 
 

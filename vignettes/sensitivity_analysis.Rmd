@@ -34,25 +34,99 @@ library(colorspace)
 no_cores <- detectCores()
 ```
 
+
+These __general inputs__ need to be provided:
+
++ *ifolder*: Folder where input data are stored (i.e. file with sampled time series)
++ *ofolder*: Folder where outputs will be written
++ *basenames*: Name of the input dataset (contains sampled satellite time series)
++ *nyr*: Number of years in observation period of input data
++ *nobsYr*: Number of observations per year of input data
++ *caseList*: Time series parameters that are evaluated. SeasAmp stands for seasonal amplitude; remSD for noise magnitude; distT for timing of the disturbance; distRec for recovery half time; missVal for missing values; distMag for disturbance magnitude
+
+The following __inputs are needed to calculate the recovery indicators__:
+
+__funSet__: list of settings for the computation of the recovery indicators. More than one value for each setting is allowed (yet an equal number of values for each setting is required). The recovery indicators are then derived for each set of values of the setting parameters.
+
++ *freq*:  'dense', 'annual', or 'quarterly'. Defines the observation frequency. For 'dense' the recovery indicators are derived from time series at the original temporal frequency. For 'annual' and 'quarterly', the time series are converted to annual or quarterly frequency, respectively.
++ *input*: 'smoothed', 'raw', 'segmented'. Defines the type of time series that is used for the recovery indicators. For 'raw', the simulated time series are directly used to calculate recovery, for 'smooth' a time series smoothing algorithm (rolling mean) is used before recovery calculation, for 'segmented' the trend component of the piecewise regression (segmentation, i.e. BFAST0n) is used.
++ *nPre*: the number of years before the disturbance used to derive the pre-disturbance values
++ *nDist*: the number of years after the disturbance used to derive the value during the disturbance 
++ *nPostMin* and *nPostMax*: the post-disturbance values are derived between nPostMin and nPostMax years after the disturbance
++ *h*: in case *input* equals 'segmented', the *h* value is used in the segmentation algorithm to define the minimal segment size either given as fraction relative to the sample size or as an integer giving the minimal number of observations in each segment
++ *breaks*: in case *input* equals 'segmented', the criterium given by *breaks* is used in the segmentation algorithm to define the optimal number of segments. Can be set to 'BIC' or 'LWZ' (but has been deactivated)
++ *seas*: in case *input* equals 'segmented', *seas* denotes whether a seasonal term needs to be used in the segmentation algorithm 
+
+
+```{r load-data}
+# user inputs
+ifolder <- '../data/' # Folder where input data are stored (i.e. file with sampled time series)
+ofolder <- '../data/' # Folder where outputs will be written
+basenames <- c('toyset', 'otherset') # Name of the input dataset (contains sampled satellite time series)
+nyr <- 18 # Number of years in observation period of input data
+nobsYr <- 365 # Number of observations per year of input data
+caseList <- c('seasAmp','remSd','distMag','distT','distRec','missVal')# Time series parameters that are evaluated. SeasAmp stands for seasonal amplitude; remSD for noise magnitude; # distT for timing of the disturbance; distRec for recovery half time; missVal for missing values; distMag for disturbance magnitude
+
+# Recovery settings
+funSet <- list('freq' = c(rep('annual', 6),  rep('dense',6), rep('quarterly',6)),
+               'input' = rep(c('raw', 'smoothed','segmented'),6),# settings for the recovery indicators
+               'nPre' = rep(2,18),
+               'nDist' = rep(1,18),
+               'nPostStart' = rep(c(4,4,4,1,1,1), 3),
+               'nDeltaStart' = rep(c(5,5,5,1,1,1), 3),
+               'nPost' = rep(c(2,2,2,1,1,1), 3),
+               'nDelta' = rep(1,18),
+               'h' = rep(0.15,18),
+               'seas' = c(rep(F,6),rep(T,12)))
+# 'nPostMin' = rep(c(4,4,4,1,1,1), 3),
+#                'nPostMax' = c(rep(5,3), rep(1,3), rep(6,3), rep(2,3), rep(6,3), rep(2,3)),
+               
+# Save all configurations (one per basename)
+# although all of them are now identical
+# NOTE: decide if we need this
+mclapply(basenames, FUN = function(basename) { save(funSet, file = file.path(ofolder, paste0(basename, '_recSettings.rda')))  })
+
+
+```
+# Simulate time series, measure recovery and evaluate performance
+Based on the characteristics of the measured time series, time series are simulated.
+
 # Extract time series characteristics from sampled time series
 The following characteristics are derived from the decomposed time series:
 
-* fraction of missing values
-* seasonal amplitude (one value for input each time series)
+* fraction of missing values (one value for each input time series)
+* seasonal amplitude (one value for each input time series)
 * average seasonal pattern
 * offset 
 * standard deviation of the remainder component (one value per input time series)
-* fitted ARMA model in the remainder component (one model per input time series)
 
-```{r load-data}
-# inputs
-ifolder <- '../data/'
-ofolder <- '../data/' # Folder where outputs will be written
-basenames <- c('toyset', 'otherset') # Name of the input dataset (contains sampled satellite time series)
-nyr <- 18 # Number of years in observation period
-nobsYr <- 365 # Number of observations per year
-caseList <- c('seasAmp','remSd','distMag','distT','distRec','missVal')# parameters to be evaluated
-```
+## Define simulation settings 
+First, the simulation settings are defined in a settings list: 
+
+* __seasAmp__: seasonal amplitude
+* __missVal__: fraction of missing values in time series
+* __remSd__: standard deviation of the remainder
+* __nyr__: time series length (number of years)
+* __distMag__: disturbance magnitude, should be a negative value to simulate a drop
+* __distT__: timing disturbance (disturbance year)
+* __distRec__: recovery half time after disturbance (number of observations)
+* __nDr__: number of simulated droughts (years where seasonality is set to the minimum value)
+* __distType__: Type of recovery (piecewise, exponential or realistic)
+* __DistMissVal__: defines how the introduced missing values should be distributed: random or at an equal interval
+* __trAv__: offset
+* __eval__: the parameters that should be evaluated
+* __nTS__: number of time series simulated per value of the evaluated parameter
+* __nobsYr__: number of observations simulated per year (this should equal the frequency of the sampled time series)
+* __seasAv__: represents the seasonal pattern
+* __parSetUp__: the parameter values selection approach (avg, dist, comb, or int)
+
+For each of these parameters, the type is defined. There are three main parameter types: *dist*, *range*, and *cat*. For the *dist* parameters, parameter values that are observed from sampled time series are available. For *range* parameters no observed values are available, but an expected range of their values can be set. Finally, the *cat* parameters are categoric.
+
+Next to the type of the parameter, a set of parameter values (*vals*) need to be defined. If the sensitivity of the recovery indicators to the parameter is being evaluated, the performance of the recovery indicators is evaluated with respect to each of these parameter values. For *dist* parameters, the observed parameter values (*obs*) need to be additionally provided. If the parameter set-up follows the *int* approach (see next section for more details), the values for the evaluated *dist* parameter are not set to predefined fixed values, but are randomly sampled over an interval. These intervals are defined in the *vals* setting: the first two values refer to the first interval, the next two values to the second interval, and so on.
+
+While evaluating the sensitivity to one specific parameter, the values of all other parameters also need to be set. Four approaches can be used to achieve this. First, the *avg* and *int* approaches set the parameters to their average value. This equals the mean value of the distribution of observed values of *dist* parameters, the mean value of the range of values (given by *vals*) for *range* parameters and a randomly selected value (selected from the values give by *vals*) for *cat* parameters. Second, the *dist* approach selects values for the parameters given by the likelihood of their occurrence. The likelihood is defined by the histogram of observed values for *dist* parameters and a random selection of values is made for *range* and *cat* parameters. Third, the *comb* approach defines all combinations of evaluated values for each parameter (as defined in *vals*). 
+
+
 
 ```{r aux-function, echo=FALSE}
 # NOTE: consider refactoring this chunk
@@ -66,7 +140,7 @@ extract_settings <- function(basename, ifolder, nyr, nobsYr, ofolder = '') {
   
   # First decompose time series into seasonality, trend and remainder:
   tmp <- decompTSbfast(dfVi, nyr, nobsYr)
-  dataVISeasbf <-  tmp[[1]] # Sesonality (fitted harmonic function)
+  dataVISeasbf <-  tmp[[1]] # Seasonality (fitted harmonic function)
   dataVIRembf <- tmp[[2]] # Remainder
   dataVITrbf <- tmp[[3]] # Trend (linear trend without break)
   dataVISeasCoef <- tmp[[4]] # Coefficients of fitted harmonic functions 
@@ -75,15 +149,15 @@ extract_settings <- function(basename, ifolder, nyr, nobsYr, ofolder = '') {
   tsVIMissVal <- rowSums(is.na(dfVi))/(dim(dfVi)[2]-2) # Fraction missing values
   
   seasVImax <- apply(dataVISeasbf[,-c(1,2)], 1, max) # Seasonal amplitude for each pixel
-  seasS <- dataVISeasbf[dataVISeasbf[,1]<0,] # Average seasonal pattern, only southern hemisphere to avoid interference of seasonal cycles
-  seasVImean <- colMeans(as.matrix(seasS[,-c(1,2)]))
+  seasS <- dataVISeasbf[dataVISeasbf[,1]<0,] # Seasonal pattern for pixels situated in southern hemisphere to avoid interference of shifted seasonal cycles
+  seasVImean <- colMeans(as.matrix(seasS[,-c(1,2)]))# Average seasonal pattern
   
   TrVImean <- mean(rowMeans(as.matrix(dataVITrbf[,-c(1,2)])), na.rm=T) # Offset 
   
   Rem_VIsd <- apply(dataVIRembf[,-c(1,2)], 1, sd, na.rm=T) # SD of remainder per pixel
  
     # Settings  simulation
-  STnobsYr <- 365
+  STnobsYr <- nobsYr
   Vqntl <- c( .05, .25, .4, .6, .75, .95)#c( .05, .25, .5, .75, .95)#c( .5)# c( .05, .25, .5, .75)# set of quantiles used to derive realistic values (for number of 
   
   sttngs <- list()
@@ -103,7 +177,6 @@ extract_settings <- function(basename, ifolder, nyr, nobsYr, ofolder = '') {
     nTS = 100,
     nobsYr = STnobsYr,
     seasAv = seasVImean,
-    # remcoef = Rem_VIcoef,
     parSetUp = 'int') # Parameter set-up: can be avg dist, comb, or int
   
   # remove redundant variables
@@ -121,76 +194,8 @@ extract_settings <- function(basename, ifolder, nyr, nobsYr, ofolder = '') {
 ```
 
 ```{r extract-settings}
-# Start clock
-start_time <- Sys.time()
-
 # Extract settings from data
 sttngs_list <- mclapply(basenames, FUN = extract_settings, ifolder = ifolder, nyr = nyr, nobsYr = nobsYr, ofolder = ofolder, mc.cores = no_cores - 1)
-
-# Stop clock
-end_time <- Sys.time()
-print(end_time - start_time)
-```
-
-# Simulate time series, measure recovery and evaluate performance
-Based on the characteristics of the measured time series, time series are simulated.
-
-## Define simulation settings 
-First, the simulation settings are defined in a settings list: 
-
-* __seasAmp__: seasonal amplitude
-* __missVal__: fraction of missing values in time series
-* __remSd__: standard deviation of the remainder
-* __nyr__: time series length (number of years)
-* __distMag__: disturbance magnitude, should be a negative value to simulate a drop
-* __distT__: timing disturbance (disturbance year)
-* __distRec__: recovery half time after disturbance (number of observations)
-* __nDr__: number of simulated droughts 
-* __distType__: Type of recovery (piecewise, exponential or realistic)
-* __DistMissVal__: defines how the introduced missing values should be distributed: random or at an equal interval
-* __trAv__: offset
-* __eval__: the parameters that should be evaluated
-* __nTS__: number of time series simulated per value of the evaluated parameter
-* __nobsYr__: number of observations simulated per year (this should equal the frequency of the sampled time series)
-* __seasAv__: represents the seasonal pattern
-* __parSetUp__: the parameter values selection approach (avg, dist, comb, or int)
-
-For each of these parameters, the type is defined. There are three main parameter types: *dist*, *range*, and *cat*. For the *dist* parameters, parameter values that are observed from sampled time series are available. For *range* parameters no observed values are available, but an expected range of their values can be set. Finally, the *cat* parameters are categoric.
-
-Next to the type of the parameter, a set of parameter values (*vals*) need to be defined. If the sensitivity of the recovery indicators to the parameter is being evaluated, the performance of the recovery indicators is evaluated with respect to each of these parameter values. For *dist* parameters, the observed parameter values (*obs*) need to be additionally provided. If the parameter set-up follows the *int* approach (see next section for more details), the values for the evaluated *dist* parameter are not set to predefined fixed values, but are randomly sampled over an interval. These intervals are defined in the *vals* setting: the first two values refer to the first interval, the next two values to the second interval, and so on.
-
-While evaluating the sensitivity to one specific parameter, the values of all other parameters also need to be set. Four approaches can be used to achieve this. First, the *avg* and *int* approaches set the parameters to their average value. This equals the mean value of the distribution of observed values of *dist* parameters, the mean value of the range of values (given by *vals*) for *range* parameters and a randomly selected value (selected from the values give by *vals*) for *cat* parameters. Second, the *dist* approach selects values for the parameters given by the likelihood of their occurrence. The likelihood is defined by the histogram of observed values for *dist* parameters and a random selection of values is made for *range* and *cat* parameters. Third, the *comb* approach defines all combinations of evaluated values for each parameter (as defined in *vals*). 
-
-The following inputs are needed to calculate the recovery indicators:
-
-__funSet__: list of settings for the computation of the recovery indicators. More than one value for each setting is allowed (yet an equal number of values for each parameter is required). The recovery indicators are then derived for each set of values of the setting parameters.
-
-+ *freq*:  'dense', 'annual', or 'quarterly'. Defines the observation frequency. For 'dense' the original frequency is used. For 'annual' and 'quarterly', the time series are converted to annual or quarterly frequency, respectively.
-+ *input*: 'smoothed', 'raw', 'segmented'. Defines the type of time series that is used for the recovery indicators. For 'raw', the simulated time series are directly used to calculate recovery, for 'smooth' a time series smoothing algorithm (rolling mean) is used before recovery calculation, for 'segmented' the trend component of the piecewise regression (BFAST0n) is used.
-+ *nPre*: the number of years before the disturbance used to derive the pre-disturbance values
-+ *nDist*: the number of years after the disturbance used to derive the value during the disturbance 
-+ *nPostMin* and *nPostMax*: the post-disturbance values are derived between nPostMin and nPostMax years after the disturbance
-+ *h*: in case *input* equals 'segmented', the *h* value is used in the segmentation algorithm to define the minimal segment size either given as fraction relative to the sample size or as an integer giving the minimal number of observations in each segment
-+ *breaks*: in case *input* equals 'segmented', the criterium given by *breaks* is used in the segmentation algorithm to define the optimal number of segments. Can be set to 'BIC' or 'LWZ' (but has been deactivated)
-+ *seas*: in case *input* equals 'segmented', *seas* denotes whether a seasonal term needs to be used in the segmentation algorithm 
-
-
-```{r set-funSet}
-# recovery settings
-funSet <- list('freq' = c(rep('annual', 6),  rep('dense',6), rep('quarterly',6)),
-               'input' = rep(c('raw', 'smoothed','segmented'),6),# settings for the recovery indicators
-               'nPre' = rep(2,18),
-               'nDist' = c(rep(0,6),rep(1,12)),
-               'nPostMin' = rep(c(4,4,4,1,1,1), 3),
-               'nPostMax' = c(rep(5,3), rep(1,3), rep(6,3), rep(2,3), rep(6,3), rep(2,3)),
-               'h' = rep(0.15,18),
-               'seas' = c(rep(F,6),rep(T,12)))
-
-# Save all configurations (one per basename)
-# although all of them are now identical
-# NOTE: decide if we need this
-mclapply(basenames, FUN = function(basename) { save(funSet, file = file.path(ofolder, paste0(basename, '_recSettings.rda')))  })
-
 
 ```
 
@@ -211,7 +216,7 @@ testsTable <- tibble::tibble(testsTable) # Tibblify for increased readability
 print(testsTable)
 ```
 
-```{r simulate-and-extract, eval=TRUE}
+```{r simulate-and-extract}
 # Start clock
 start_time <- Sys.time()
 set_fast_options()
@@ -226,308 +231,3 @@ end_time <- Sys.time()
 print(end_time - start_time)
 
 ```
-
-# Plot the performance indicators
-
-```{r plot2, include = F}
-# general settings
-# characteristics for which a plot needs to be made
-
-
-simFullName  <- list('Disturbance magnitude',
-                     'Number of droughts',
-                     'Time series length',
-                     'Seasonal amplitude',
-                     'SD remainder',
-                     'Disturbance timing',
-                     'Recovery period [years]',
-                     'Missing values')
-names(simFullName) <- c('distMag',
-                        'nDr', 
-                        'len',
-                        'seasAmp',
-                        'remSd',
-                        'distT',
-                        'distRec',
-                        'missVal')
-```
-
-Compare the performance of each recovery indicator
-```{r compare-indicators, include=F}
-for(vr in 1:length(caseList)){
-  evr <- caseList[vr]# name of parameter that will be evaluated in the simulation
-  # setvr <- sttngs[[evr]]# settings of simulation
-  
-  # NOTE: retrieve data from results_list instead of from saved files
-  RRI_rsq <- loadRData(file.path(ofolder, paste0(basename, '_RRI_R2_' , evr, '.rda')))
-  R80p_rsq <- loadRData(file.path(ofolder, paste0(basename, '_R80p_R2_' , evr, '.rda')))
-  YrYr_rsq <- loadRData(file.path(ofolder, paste0(basename, '_YrYr_R2_' , evr, '.rda')))
-  
-  RRI_mape <- loadRData(file.path(ofolder, paste0(basename, '_RRI_MAPE_' , evr, '.rda')))
-  R80p_mape <- loadRData(file.path(ofolder, paste0(basename, '_R80p_MAPE_' , evr, '.rda')))
-  YrYr_mape <- loadRData(file.path(ofolder, paste0(basename, '_YrYr_MAPE_' , evr, '.rda')))
-  
-  RRI_nTS <- loadRData(file.path(ofolder, paste0(basename, '_RRI_nTS_' , evr, '.rda')))
-  R80p_nTS <- loadRData(file.path(ofolder, paste0(basename, '_R80p_nTS_' , evr, '.rda')))
-  YrYr_nTS <- loadRData(file.path(ofolder, paste0(basename, '_YrYr_nTS_' , evr, '.rda')))
-  
-  tot_rsq <- melt(rbind(RRI_rsq, R80p_rsq, YrYr_rsq))
-  tot_mape <- melt(rbind(RRI_mape, R80p_mape, YrYr_mape))
-  tot_nTS <- melt(rbind(RRI_nTS, R80p_nTS, YrYr_nTS))
-  
-  
-  tot_rsq$Period <- revalue(factor(tot_rsq$nPostMin), c("1"="Short", "4"="Long"))
-  tot_mape$Period <- revalue(factor(tot_mape$nPostMin), c("1"="Short", "4"="Long"))
-  tot_nTS$Period <- revalue(factor(tot_nTS$nPostMin), c("1"="Short", "4"="Long"))
-  
-   if((evr == 'remSd') || (evr == 'seasAmp') || (evr == 'missVal')) {
-    tot_rsq$variable <- mapvalues(tot_rsq$variable, from = levels(tot_rsq$variable), to = c("no", "low", 'medium', 'high'))
-    tot_mape$variable <-mapvalues(tot_mape$variable, from = levels(tot_mape$variable), to = c("no", "low", 'medium', 'high'))
-    tot_nTS$variable <-mapvalues(tot_nTS$variable, from = levels(tot_nTS$variable), to = c("no", "low", 'medium', 'high'))
-  }  else{
-    tot_rsq$variable <-mapvalues(tot_rsq$variable, levels(tot_rsq$variable), to = c("low", 'medium', 'high'))
-    tot_mape$variable <-mapvalues(tot_mape$variable, levels(tot_mape$variable), to = c("low", 'medium', 'high'))
-    tot_nTS$variable <-mapvalues(tot_nTS$variable, levels(tot_nTS$variable), to = c("low", 'medium', 'high'))
-  }
-  # tot_rsq <- tot_rsq[(tot_rsq$Dense == 'dense' & tot_rsq$Smooth == 'raw' & tot_rsq$Period == 'Long'),]
-  tot_rsq$param = simFullName[[caseList[[vr]]]]
-  if(vr == 1){totp_rsq <- tot_rsq}else{totp_rsq <- rbind(totp_rsq,tot_rsq)}
-  
-  # tot_mape <- tot_mape[(tot_mape$Dense == 'dense' & tot_mape$Smooth == 'raw' & tot_mape$Period == 'Long'),]
-  tot_mape$param = simFullName[[caseList[[vr]]]]
-  if(vr == 1){totp_mape <- tot_mape}else{totp_mape <- rbind(totp_mape,tot_mape)}
-  
-  # tot_nTS <- tot_nTS[(tot_nTS$Dense == 'dense' & tot_nTS$Smooth == 'raw' & tot_nTS$Period == 'Long'),]
-  tot_nTS$param = simFullName[[caseList[[vr]]]]
-  if(vr == 1){totp_nTS <- tot_nTS}else{totp_nTS <- rbind(totp_nTS,tot_nTS)}
-}
-
-xlbl <- 'Metric'
-  
-  # plot R2
-  data <- totp_rsq
-  ylbl <- 'R²'
-  pltR2 <- plotMet(data, xlbl, ylbl)
-  png(file.path(ofolder, paste0(basename, '_RsqMet.png')),width = 1311,height =628 )
-  print(pltR2)
-  dev.off()
-  
-  # plot MAPE
-  data <- totp_mape
-  ylbl <- 'MAPE'
-  pltMAPE <- plotMet(data,  xlbl, ylbl)
-  png(file.path(ofolder, paste0(basename, '_MAPEMet.png')),width = 1311,height =628 )
-  print(pltMAPE)
-  dev.off()
-   # plot fraction of time series processed
-  data <- totp_nTS
-  ylbl <- 'Fraction'
-  pltnTS <- plotMet(data,  xlbl, ylbl)
-  png(file.path(ofolder, paste0(basename, '_nTSMet.png')),width = 1311,height =628 )
-  print(pltnTS)
-  dev.off()
-  
-  print(pltR2)
-  print(pltMAPE)
-  print(pltnTS)
-
-```
-
-Which characteristics influence the performance the most?
-
-```{r compare-performance, include=F}
-# compare effect of each parameter on the 
-caseList <- c( 'seasAmp', 'remSd', 'missVal','distRec','distT','distMag')# evaluated time series characteristics for which a plot needs to be made
-
-simFullName  <- list('Disturbance magnitude',
-                     'Disturbance timing',
-                     'Recovery period',
-                     'Number of droughts',
-                     'Time series length',
-                     'Seasonal amplitude',
-                     'SD remainder',
-                     'Missing values')
-names(simFullName) <- c('distMag',
-                        'distT',
-                        'distRec',
-                        'nDr', 
-                        'len',
-                        'seasAmp',
-                        'remSd',
-                        'missVal')
-
-for(vr in 1:length(caseList)){
-  evr <- caseList[vr]# name of parameter that will be evaluated in the simulation
-  # setvr <- sttngs[[evr]]# settings of simulation
-  
-  RRI_rsq <- loadRData(file.path(ofolder, paste0(basename, '_RRI_R2_' , evr, '.rda')))
-  R80p_rsq <- loadRData(file.path(ofolder, paste0(basename, '_R80p_R2_' , evr, '.rda')))
-  YrYr_rsq <- loadRData(file.path(ofolder, paste0(basename, '_YrYr_R2_' , evr, '.rda')))
-  
-  RRI_mape <- loadRData(file.path(ofolder, paste0(basename, '_RRI_MAPE_' , evr, '.rda')))
-  R80p_mape <- loadRData(file.path(ofolder, paste0(basename, '_R80p_MAPE_' , evr, '.rda')))
-  YrYr_mape <- loadRData(file.path(ofolder, paste0(basename, '_YrYr_MAPE_' , evr, '.rda')))
-  
-  RRI_nTS <- loadRData(file.path(ofolder, paste0(basename, '_RRI_nTS_' , evr, '.rda')))
-  R80p_nTS <- loadRData(file.path(ofolder, paste0(basename, '_R80p_nTS_' , evr, '.rda')))
-  YrYr_nTS <- loadRData(file.path(ofolder, paste0(basename, '_YrYr_nTS_' , evr, '.rda')))
-  
-  tot_rsq <- melt(rbind(RRI_rsq, R80p_rsq, YrYr_rsq))
-  tot_mape <- melt(rbind(RRI_mape, R80p_mape, YrYr_mape))
-  tot_nTS <- melt(rbind(RRI_nTS, R80p_nTS, YrYr_nTS))
-  
-  tot_rsq$Period <- revalue(factor(tot_rsq$nPostMin), c("1"="Short", "4"="Long"))
-  tot_mape$Period <- revalue(factor(tot_mape$nPostMin), c("1"="Short", "4"="Long"))
-  tot_nTS$Period <- revalue(factor(tot_nTS$nPostMin), c("1"="Short", "4"="Long"))
-  
-   if((evr == 'remSd') || (evr == 'seasAmp') || (evr == 'missVal')) {
-    tot_rsq$variable <- mapvalues(tot_rsq$variable, from = levels(tot_rsq$variable), to = c("no", "low", 'medium', 'high'))
-    tot_mape$variable <-mapvalues(tot_mape$variable, from = levels(tot_mape$variable), to = c("no", "low", 'medium', 'high'))
-    tot_nTS$variable <-mapvalues(tot_nTS$variable, from = levels(tot_nTS$variable), to = c("no", "low", 'medium', 'high'))
-  }  else{
-    tot_rsq$variable <-mapvalues(tot_rsq$variable, levels(tot_rsq$variable), to = c("low", 'medium', 'high'))
-    tot_mape$variable <-mapvalues(tot_mape$variable, levels(tot_mape$variable), to = c("low", 'medium', 'high'))
-    tot_nTS$variable <-mapvalues(tot_nTS$variable, levels(tot_nTS$variable), to = c("low", 'medium', 'high'))
-  }
-  tot_rsq <- tot_rsq[(tot_rsq$Dense == 'dense' & tot_rsq$Smooth == 'raw' & tot_rsq$Period == 'Long'),]
-  tot_rsq$param = simFullName[[caseList[[vr]]]]
-  if(vr == 1){totp_rsq <- tot_rsq}else{totp_rsq <- rbind(totp_rsq,tot_rsq)}
-  
-  tot_mape <- tot_mape[(tot_mape$Dense == 'dense' & tot_mape$Smooth == 'raw' & tot_mape$Period == 'Long'),]
-  tot_mape$param = simFullName[[caseList[[vr]]]]
-  if(vr == 1){totp_mape <- tot_mape}else{totp_mape <- rbind(totp_mape,tot_mape)}
-  
-  tot_nTS <- tot_nTS[(tot_nTS$Dense == 'dense' & tot_nTS$Smooth == 'raw' & tot_nTS$Period == 'Long'),]
-  tot_nTS$param = simFullName[[caseList[[vr]]]]
-  if(vr == 1){totp_nTS <- tot_nTS}else{totp_nTS <- rbind(totp_nTS,tot_nTS)}
-}
-
-
-  totp_rsq$paramType <- 'Environmental parameter'
-  totp_rsq[(totp_rsq$param == 'Disturbance magnitude' | totp_rsq$param == 'Recovery period' | totp_rsq$param == 'Disturbance timing'), ]$paramType <- 'Disturbance parameter'
-  totp_mape$paramType <- 'Environmental parameter'
-  totp_mape[(totp_mape$param == 'Disturbance magnitude' | totp_mape$param == 'Recovery period' | totp_mape$param == 'Disturbance timing' ),]$paramType  <- 'Disturbance parameter'
-  totp_nTS$paramType <- 'Environmental parameter'
-  totp_nTS[(totp_rsq$param == 'Disturbance magnitude' | totp_nTS$param == 'Recovery period' | totp_nTS$param == 'Disturbance timing' ),]$paramType  <- 'Disturbance parameter'
-
-data <- totp_rsq
-  data$param <- factor(data$param, levels = rev(unlist(simFullName[caseList])))
-  xlbl <- 'Parameter value'
-  ylbl <- 'R²'
-  pltR2 <- plotEnv(data, xlbl, ylbl, scales = 'free_y')
-  png(file.path(ofolder, paste0(basename, '_Rsq_Env.png')),width = 1311,height =628 )
-  print(pltR2)
-  dev.off()
-  
-  data <- totp_mape
-  data$param <- factor(data$param, levels = rev(unlist(simFullName[caseList])))
-  data$value[is.infinite(data$value)] <- NA
-  xlbl <- 'Parameter value'
-  ylbl <- 'MAPE'
-  pltMAPE <- plotEnv(data, xlbl, ylbl, scales = 'free_y')
-  png(file.path(ofolder, paste0(basename, '_MAPE_Env.png')),width = 1311,height =628 )
-  print(pltMAPE)
-  dev.off()
-  
-  data <- totp_nTS
-  data$param <- factor(data$param, levels = rev(unlist(simFullName[caseList])))
-  xlbl <- 'Parameter value'
-  ylbl <- 'Fraction'
-  pltnTS <- plotEnv(data, xlbl, ylbl, scales = 'free_y')
-  png(file.path(ofolder, paste0(basename, '_nTS_Env.png')),width = 1311,height =628 )
-  print(pltnTS)
-  dev.off()
-  
-  print(pltR2)
-  print(pltMAPE)
-  print(pltnTS)
-```
-
-How can we improve the performance?
-
-```{r improve-performance, include=F}
-for(vr in 1:length(caseList)){
-  evr <- caseList[vr]# name of parameter that will be evaluated in the simulation
-  # setvr <- sttngs[[evr]]# settings of simulation
-  
-  RRI_rsq <- loadRData(file.path(ofolder, paste0(basename, '_RRI_R2_' , evr, '.rda')))
-  R80p_rsq <- loadRData(file.path(ofolder, paste0(basename, '_R80p_R2_' , evr, '.rda')))
-  YrYr_rsq <- loadRData(file.path(ofolder, paste0(basename, '_YrYr_R2_' , evr, '.rda')))
-  
-  RRI_rmse <- loadRData(file.path(ofolder, paste0(basename, '_RRI_RMSE_' , evr, '.rda')))
-  R80p_rmse <- loadRData(file.path(ofolder, paste0(basename, '_R80p_RMSE_' , evr, '.rda')))
-  YrYr_rmse <- loadRData(file.path(ofolder, paste0(basename, '_YrYr_RMSE_' , evr, '.rda')))
-  
-  RRI_mape <- loadRData(file.path(ofolder, paste0(basename, '_RRI_MAPE_' , evr, '.rda')))
-  R80p_mape <- loadRData(file.path(ofolder, paste0(basename, '_R80p_MAPE_' , evr, '.rda')))
-  YrYr_mape <- loadRData(file.path(ofolder, paste0(basename, '_YrYr_MAPE_' , evr, '.rda')))
-  
-  RRI_nTS <- loadRData(file.path(ofolder, paste0(basename, '_RRI_nTS_' , evr, '.rda')))
-  R80p_nTS <- loadRData(file.path(ofolder, paste0(basename, '_R80p_nTS_' , evr, '.rda')))
-  YrYr_nTS <- loadRData(file.path(ofolder, paste0(basename, '_YrYr_nTS_' , evr, '.rda')))
-  
-  tot_rsq <- melt(rbind(RRI_rsq, R80p_rsq, YrYr_rsq))
-  tot_rmse <- melt(rbind(RRI_rmse, R80p_rmse, YrYr_rmse))
-  tot_mape <- melt(rbind(RRI_mape, R80p_mape, YrYr_mape))
-  tot_nTS <- melt(rbind(RRI_nTS, R80p_nTS, YrYr_nTS))
-  
-  tot_rsq$Period <- revalue(factor(tot_rsq$nPostMin), c("1"="Short", "4"="Long"))
-  tot_rmse$Period <- revalue(factor(tot_rmse$nPostMin), c("1"="Short", "4"="Long"))
-  tot_mape$Period <- revalue(factor(tot_mape$nPostMin), c("1"="Short", "4"="Long"))
-  tot_nTS$Period <- revalue(factor(tot_nTS$nPostMin), c("1"="Short", "4"="Long"))
-  
-   if((evr == 'remSd') || (evr == 'seasAmp') || (evr == 'missVal')) {
-    tot_rsq$variable <- mapvalues(tot_rsq$variable, from = levels(tot_rsq$variable), to = c("no", "low", 'medium', 'high'))
-    tot_rmse$variable <-mapvalues(tot_rmse$variable, from = levels(tot_rmse$variable), to = c("no", "low", 'medium', 'high'))
-    tot_mape$variable <-mapvalues(tot_mape$variable, from = levels(tot_mape$variable), to = c("no", "low", 'medium', 'high'))
-    tot_nTS$variable <-mapvalues(tot_nTS$variable, from = levels(tot_nTS$variable), to = c("no", "low", 'medium', 'high'))
-  } else{ 
-    tot_rsq$variable <- mapvalues(tot_rsq$variable, from = levels(tot_rsq$variable), to = c( "low", 'medium', 'high'))
-    tot_rmse$variable <-mapvalues(tot_rmse$variable, from = levels(tot_rmse$variable), to = c( "low", 'medium', 'high'))
-    tot_mape$variable <-mapvalues(tot_mape$variable, from = levels(tot_mape$variable), to = c( "low", 'medium', 'high'))
-    tot_nTS$variable <-mapvalues(tot_nTS$variable, from = levels(tot_nTS$variable), to = c( "low", 'medium', 'high'))
-    }
-  
-  lbls <- c("raw, BAP", 'piecewise, BAP', 'smoothed, BAP', "raw, dense", 'piecewise, dense', 'smoothed, dense', "raw, quarterly", 'piecewise, quarterly', 'smoothed, quarterly')
-  sname <- caseList[[vr]]
-  xlbl <- simFullName[[sname]]
-  
-  # plot R2
-  data <- tot_rsq
-  ylbl <- 'R²'
-  pltR2 <- plotSens(data, lbls, xlbl, ylbl, scales = 'fixed')
-  png(file.path(ofolder, paste0(basename, '_Rsq_',evr,'.png')),width = 1311,height =628 )
-  print(pltR2)
-  dev.off()
-  
-  # plot RMSE
-  data <- tot_rmse
-  ylbl <- 'RMSE'
-  pltRMSE <- plotSens(data, lbls, xlbl, ylbl, scales = 'free_y')
-  png(file.path(ofolder, paste0(basename, '_RMSE_',evr,'.png')),width = 1311,height =628 )
-  print(pltRMSE)
-  dev.off()
-   # plot MAPE
-  data <- tot_mape
-  ylbl <- 'MAPE'
-  pltMAPE <- plotSens(data, lbls, xlbl, ylbl, scales = 'free_y')
-  png(file.path(ofolder, paste0(basename, '_MAPE_',evr,'.png')),width = 1311,height =628 )
-  print(pltMAPE)
-  dev.off()
-   # plot fraction of time series processed
-  data <- tot_nTS
-  ylbl <- 'Fraction'
-  pltnTS <- plotSens(data, lbls, xlbl, ylbl, scales = 'free_y')
-  png(file.path(ofolder, paste0(basename, '_nTS_',evr,'.png')),width = 1311,height =628 )
-  print(pltnTS)
-  dev.off()
-  
-  print(pltR2)
-  print(pltRMSE)
-  print(pltMAPE)
-  print(pltnTS)
-}
-```
-
-
-

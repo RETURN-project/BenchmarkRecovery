@@ -10,7 +10,17 @@ To reduce the interference of the seasonal pattern of dense time series, the cho
 (Frazier, R. J., Coops, N. C., Wulder, M. A., Hermosilla, T., & White, J. C. (2018). Analyzing spatial and temporal variability in short-term rates
 of post-fire vegetation return from Landsat time series. Remote Sensing of Environment, 205, 32-45.)}
 \usage{
-calcFrazier(tsio, tdist, obspyr, nPre, nDist, nPostMin, nPostMax)
+calcFrazier(
+  tsio,
+  tdist,
+  obspyr,
+  nPre,
+  nDist,
+  nPost,
+  nPostStart,
+  nDelta,
+  nDeltaStart
+)
 }
 \arguments{
 \item{tsio}{vector of observations (time series with a fixed observation frequency)}

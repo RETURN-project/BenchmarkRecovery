@@ -17,48 +17,86 @@
 #' @return a list containing the RRI recovery indicator, R80p recovery indicator and YrYr recovery indicator
 #' @export
 #'
-calcFrazier <- function(tsio, tdist, obspyr, nPre, nDist, nPostMin, nPostMax){
-    # check if there are enough observations before and after the disturbance to calculate the metrics
-    if ( (tdist > (nPre*obspyr) ) & ( tdist < (length(tsio) - (nPostMax*obspyr) + 1) ) & ( sum(!is.na(tsio)) > 2) ) {
-      # translate parameters to those needed for the recovery functions
-      ys <- tsio# response values of time series
-      ts <- seq(1, length(tsio))# observation numbers of time series
-        # the observations during the perturbation
-      if (obspyr == 1 | nDist == 0 ){# if annual observatons or if duration of perturbation equals one time step
-        tpert <- seq(tdist, tdist + nDist*obspyr )
-      }else{
-        tpert <- seq(tdist, tdist + nDist*obspyr - 1)
-      }
-        # the observations that represent the pre-disturbed state
-      ts_pre <- seq(tdist - nPre*obspyr, tdist - 1)
-
-        # the observations that represent the post-disturbed state
-      if (obspyr == 1 | nPostMin == nPostMax) {
-        ts_post <-  seq(tdist + (nPostMin*obspyr), tdist + (nPostMax*obspyr))
-      } else {
-        ts_post <-  seq(tdist + (nPostMin*obspyr), tdist + (nPostMax*obspyr) - 1)
-      }
-        # the observations that define the post-disturbance state for YrYr metric (relative to start disturbance)
-      # the post-disturbance period for the YrYr metric is defined as the last year of the regular post-disturbance period
-      if(obspyr==1){
-        deltat <- nPostMax
-      }else{
-        deltat <- ts_post[(length(ts_post) - obspyr+1):length(ts_post)]-tdist
-      }
-        # Derive recovery indicators
-      RRI <- rri(ts, ys, tpert, ts_pre, ts_post)
-      R80P <- r80p(ts, ys, r = 0.8, ts_pre, ts_post)
-      YrYr <- yryr(ts, ys, tpert, deltat)
-      # make list of recovery indicators as output of the function
-      lst <- list(RRI, R80P, YrYr)
-      names(lst) <- c('RRI', 'R80P', 'YrYr')
-      # give NA as output if not able to calculate the recovery indicators
-    } else {
-      lst <- list(NA, NA, NA)
-      names(lst) <- c('RRI', 'R80P', 'YrYr')
+calcFrazier <- function(tsio, tdist, obspyr, nPre, nDist, nPost, nPostStart, nDelta, nDeltaStart){
+  # check if there are enough observations before and after the disturbance to calculate the metrics
+  if ( (tdist > (nPre*obspyr) ) & ( (tdist + ((nPost+nPostStart)*obspyr) - 2) < length(tsio)  ) & ( sum(!is.na(tsio)) > 2) ) {
+    # translate parameters to those needed for the recovery functions
+    ys <- tsio# response values of time series
+    ts <- seq(1, length(tsio))# observation numbers of time series
+    # the observations during the perturbation
+    if (nDist == 0 ){# if annual observatons or if duration of perturbation equals one time step
+      tpert <- tdist
+    }else if (obspyr == 1){
+      tpert <- seq(tdist, tdist + nDist-1 )
+    }else{
+      tpert <- seq(tdist, tdist + nDist*obspyr - 1)
     }
+    # the observations that represent the pre-disturbed state
+    ts_pre <- seq(tdist - nPre*obspyr, tdist - 1)
+
+    # the observations that represent the post-disturbed state
+    ts_post <-  seq(tdist + (nPostStart*obspyr), tdist + ((nPostStart + nPost)*obspyr) - 1)
+
+    # the observations that define the post-disturbance state for YrYr metric (relative to start disturbance)
+    # the post-disturbance period for the YrYr metric is defined as the last year of the regular post-disturbance period
+    deltat <- seq(nDeltaStart*obspyr,(nDelta+nDeltaStart)*obspyr-1)#ts_post[(length(ts_post) - obspyr+1):length(ts_post)]-tdist
+
+    # Derive recovery indicators
+    RRI <- rri(ts, ys, tpert, ts_pre, ts_post)
+    R80P <- r80p(ts, ys, r = 0.8, ts_pre, ts_post)
+    YrYr <- yryr(ts, ys, tpert, deltat)
+    # make list of recovery indicators as output of the function
+    lst <- list(RRI, R80P, YrYr)
+    names(lst) <- c('RRI', 'R80P', 'YrYr')
+    # give NA as output if not able to calculate the recovery indicators
+  } else {
+    lst <- list(NA, NA, NA)
+    names(lst) <- c('RRI', 'R80P', 'YrYr')
+  }
   lst
 }
+# calcFrazier <- function(tsio, tdist, obspyr, nPre, nDist, nPostMin, nPostMax){
+#     # check if there are enough observations before and after the disturbance to calculate the metrics
+#     if ( (tdist > (nPre*obspyr) ) & ( tdist < (length(tsio) - ((nPost+nPostStart)*obspyr) + 1) )  & ( sum(!is.na(tsio)) > 2) ) {
+#       # translate parameters to those needed for the recovery functions
+#       ys <- tsio# response values of time series
+#       ts <- seq(1, length(tsio))# observation numbers of time series
+#         # the observations during the perturbation
+#       if (obspyr == 1 | nDist == 0 ){# if annual observatons or if duration of perturbation equals one time step
+#         tpert <- seq(tdist, tdist + nDist*obspyr )
+#       }else{
+#         tpert <- seq(tdist, tdist + nDist*obspyr - 1)
+#       }
+#         # the observations that represent the pre-disturbed state
+#       ts_pre <- seq(tdist - nPre*obspyr, tdist - 1)
+#
+#         # the observations that represent the post-disturbed state
+#       if (obspyr == 1 | nPostMin == nPostMax) {
+#         ts_post <-  seq(tdist + (nPostMin*obspyr), tdist + (nPostMax*obspyr))
+#       } else {
+#         ts_post <-  seq(tdist + (nPostMin*obspyr), tdist + (nPostMax*obspyr) - 1)
+#       }
+#         # the observations that define the post-disturbance state for YrYr metric (relative to start disturbance)
+#       # the post-disturbance period for the YrYr metric is defined as the last year of the regular post-disturbance period
+#       if(obspyr==1){
+#         deltat <- nPostMax
+#       }else{
+#         deltat <- ts_post[(length(ts_post) - obspyr+1):length(ts_post)]-tdist
+#       }
+#         # Derive recovery indicators
+#       RRI <- rri(ts, ys, tpert, ts_pre, ts_post)
+#       R80P <- r80p(ts, ys, r = 0.8, ts_pre, ts_post)
+#       YrYr <- yryr(ts, ys, tpert, deltat)
+#       # make list of recovery indicators as output of the function
+#       lst <- list(RRI, R80P, YrYr)
+#       names(lst) <- c('RRI', 'R80P', 'YrYr')
+#       # give NA as output if not able to calculate the recovery indicators
+#     } else {
+#       lst <- list(NA, NA, NA)
+#       names(lst) <- c('RRI', 'R80P', 'YrYr')
+#     }
+#   lst
+# }
 
 #' Post-disturbance slope and recovery metrics derived from BFAST0n trend segments. The calcBFASTrec function derives a set of recovery indicators after fitting a segmented trend in the time series. Using the breakpoints function of the strucchange package, a segmented trend is fitted (hereafter called BFAST0n trend segments). The detected break showing the largest change (in absolute values) is assumed to represent the disturbance. Using the segmented trend and detected disturbance date, the RRI, R80p, YrYr and the slope of the post-disturbance trend segment are derived as recovery indicators.
 #'
@@ -76,7 +114,7 @@ calcFrazier <- function(tsio, tdist, obspyr, nPre, nDist, nPostMin, nPostMax){
 #' @export
 #' @import strucchange
 #' @import stats
-calcBFASTrec <- function(tsio, obspyr, h, nPre, nDist, nPostMin, nPostMax, seas = F) {
+calcBFASTrec <- function(tsio, obspyr, h, nPre, nDist, nPost, nPostStart, nDelta, nDeltaStart, seas = F) {
   # Create time series object, needed as input for the piecewise regression
   tsi <- ts(tsio, frequency = obspyr)
   # Convert the time series object into a dataframe (with response, trend, harmonic), needed for the breakpoints function (dependent and independent variables in regression)
@@ -124,7 +162,7 @@ calcBFASTrec <- function(tsio, obspyr, h, nPre, nDist, nPostMin, nPostMax, seas 
       dbr <- trf[tbp+1]-trf[tbp]
       tbp <- tbp[which(abs(dbr) == max(abs(dbr)))]
       # Calculate Frazier recovery metrics on trend component
-      frz <- calcFrazier(as.numeric(trf), (tbp+1), floor(obspyr), nPre, nDist, nPostMin, nPostMax)
+      frz <- calcFrazier(as.numeric(trf), (tbp+1), floor(obspyr), nPre, nDist, nPost, nPostStart, nDelta, nDeltaStart)
       # Calculate the post-disturbance slope of the trend component (first segment after break)
       sl <- (trf[tbp+3] - trf[tbp+2])
       frz <- c(frz, sl)
@@ -159,8 +197,12 @@ toDF <- function(mat, setvr, metric, funSet){#freq, input, nPostMin, seas
   tst$h <- factor(funSet$h)
   tst$nDist <- factor(funSet$nDist)
   tst$nPre <- factor(funSet$nPre)
-  tst$nPostMin <- factor(funSet$nPostMin)#revalue(factor(nPostMin), c("1"="Short", "4"="Long"))#factor(recSttngs$nDist)#
-  tst$nPostMax <- factor(funSet$nPostMax)#revalue(factor(nPostMin), c("1"="Short", "4"="Long"))#factor(recSttngs$nDist)#
+  tst$nPostStart <- factor(funSet$nPostStart)
+  tst$nDeltaStart <- factor(funSet$nDeltaStart)
+  tst$nPost <- factor(funSet$nPost)
+  tst$nDelta <- factor(funSet$nDelta)
+  # tst$nPostMin <- factor(funSet$nPostMin)#revalue(factor(nPostMin), c("1"="Short", "4"="Long"))#factor(recSttngs$nDist)#
+  # tst$nPostMax <- factor(funSet$nPostMax)#revalue(factor(nPostMin), c("1"="Short", "4"="Long"))#factor(recSttngs$nDist)#
   tst$Seas <- factor(funSet$seas)
   tst
 }
@@ -207,12 +249,6 @@ evalParam <- function(evr, sttngs, funSet, basename, ofolder = '') {
   YrYr_rsq <- empty
   YrYr_nTS <- empty
 
-  # SL_rmse <- empty
-  # SL_mape <- empty
-  # SL_rsq <- empty
-  # SL_nTS <- empty
-
-
   # iterate over values of evaluated parameter and simulate nrep time series per combination of all other variables
   for (i in 1:length(parvr)) {
 
@@ -242,7 +278,7 @@ evalParam <- function(evr, sttngs, funSet, basename, ofolder = '') {
         tsseas <-sc[[2]][1,] # simulated seasonality component of time series  (contains no missing values)
         obspyr <- sc[[5]][1,]$obs_per_year # number of observations per year
         tdist <- sc[[5]][1,]$dist_time# timing of the disturbance (observation number)
-        tsref <- sc[[3]][1,]# the simulated trend componend = reference time series to measure the recovery indicators for validation (contains no missing values)
+        tsref <- sc[[3]][1,]# the simulated trend component = reference time series to measure the recovery indicators for validation (contains no missing values)
         nobs <- (sc[[5]][1,]$number_yrs)* obspyr# total number of observations = number of years * number of observations per year
         tm <- 1:nobs# the time is represented by the observation number
 
@@ -252,8 +288,12 @@ evalParam <- function(evr, sttngs, funSet, basename, ofolder = '') {
         frq <- funSet[['freq']][rset]# 'dense', 'quarterly', or 'annual'. Defines the observation frequency. For 'dense' the original frequency is used. For 'annual' or 'quarterly', the time series are converted to annual or quarterly frequency, respectively.
         nPre <- funSet[['nPre']][rset]# the number of years before the disturbance used to derive the pre-disturbance values
         nDist <- funSet[['nDist']][rset]# the number of years after the disturbance used to derive the value during the disturbance
-        nPostMin <- funSet[['nPostMin']][rset]# the post-disturbance values are derived between nPostMin and nPostMax years after the disturbance
-        nPostMax <- funSet[['nPostMax']][rset]#  the post-disturbance values are derived between nPostMin and nPostMax years after the disturbance
+        # nPostMin <- funSet[['nPostMin']][rset]# the post-disturbance values are derived between nPostMin and nPostMax years after the disturbance
+        # nPostMax <- funSet[['nPostMax']][rset]#  the post-disturbance values are derived between nPostMin and nPostMax years after the disturbance
+        nPostStart = funSet[['nPostStart']][rset]
+        nDeltaStart = funSet[['nDeltaStart']][rset]
+        nPost = funSet[['nPost']][rset]
+        nDelta = funSet[['nDelta']][rset]
         h <- funSet[['h']][rset]# only relevant if inp equals 'segmented', the h value is used in the piecewise regression to define the minimal segment size either given as fraction relative to the sample size or as an integer giving the minimal number of observations in each segment
         seas <- funSet[['seas']][rset]# only relevant if inp equals 'segmented', seas denotes whether a seasonal term needs to be used in the piecewise regression
         breaks <- funSet[['breaks']][rset]# only relevant if inp equals 'segmented', the criterium given by breaks is used in the piecewise regression to define the optimal number of segments. Can be set to 'BIC' or 'LWZ'. This option has been deactivated
@@ -266,7 +306,7 @@ evalParam <- function(evr, sttngs, funSet, basename, ofolder = '') {
           tsref <- toAnnualTS(tsseas, tsref, obspyr, dtmax = 2/12)
           tdist <- which(tsref == min(tsref, na.rm = T))#ceiling(tdist/obspyr)
           obspyr <- 1
-        } else if (frq == 'quarterly'){ # TODO: else or else if? --> can be else if
+        } else if (frq == 'quarterly'){
           #convert time series to quarterly resolution
           dts <- seq(as.Date('2000-01-01'), by = '1 days', length = nobs)
           tsi <- toRegularTS(tsi, dts, 'mean', 'quart')
@@ -275,8 +315,7 @@ evalParam <- function(evr, sttngs, funSet, basename, ofolder = '') {
           obspyr <- 4
         }
 
-        # If the input is smoothed data, do this
-        # TODO: what does 'this' mean exactly? --> can also be part of the else if
+        # If the noise removal technique is 'smoothed', use rolling mean to smooth the simulated time series
         if (inp == 'smoothed'){
             # smooth the time series using rolling mean with window size given by winsize
           temp.zoo<-zoo(tsi,(1:length(tsi)))# generate a zoo time series object
@@ -285,31 +324,24 @@ evalParam <- function(evr, sttngs, funSet, basename, ofolder = '') {
         }
         # calculate recovery indicators from simulated time series
         if((inp == 'smoothed') | (inp == 'raw')){
-          outp <- calcFrazier(tsi, tdist, obspyr, nPre, nDist, nPostMin, nPostMax)
+          outp <- calcFrazier(tsi, tdist, obspyr, nPre, nDist, nPost, nPostStart, nDelta, nDeltaStart)
           m_RRIi[rset,pari] <- outp$RRI# measured RRI
           m_R80pi[rset,pari] <- outp$R80P# measured R80p
           m_YrYri[rset,pari] <- outp$YrYr# measured YrYR
           rm(outp)
-        }
-        if(funSet$input[rset] == 'segmented'){
-          outp <- calcBFASTrec(tsi, obspyr, h, nPre, nDist, nPostMin, nPostMax, seas)
+        } else if(funSet$input[rset] == 'segmented'){
+          outp <- calcBFASTrec(tsi, obspyr, h, nPre, nDist, nPost, nPostStart, nDelta, nDeltaStart, seas)
           m_RRIi[rset,pari] <- outp$RRI# measured RRI
           m_R80pi[rset,pari] <- outp$R80P# measured R80p
           m_YrYri[rset,pari] <- outp$YrYr# measured YrYR
-          # m_SLi[rset,pari] <- outp$Sl# measured YrYR
-          #print(outp)
           rm(outp)
         }
 
-        # calculate reference indicators (assumed truth for validation) based on simulated trend component
-        outp <- calcFrazier(tsref, tdist, obspyr, nPre, nDist, nPostMin, nPostMax)
+        # calculate reference indicators (assumed truth for validation) based on simulated reference component
+        outp <- calcFrazier(tsref, tdist, obspyr, nPre, nDist, nPost, nPostStart, nDelta, nDeltaStart)
         s_RRIi[rset,pari] <- outp$RRI#simulated (true) RRI
         s_R80pi[rset,pari] <- outp$R80P#simulated (true) R80p
         s_YrYri[rset,pari] <- outp$YrYr
-        # if(inp == 'segmented'){
-        #   # s_SLi[rset,pari] <- tsref[tdist+3] - tsref[tdist+2]
-        # }
-
       }
       rm(sc)
     }
@@ -319,47 +351,39 @@ evalParam <- function(evr, sttngs, funSet, basename, ofolder = '') {
     RRI_rsq[i,] <- sapply(1:dim(s_RRIi)[1], function(it) rsq(s_RRIi[it,], m_RRIi[it,]))
     R80p_rsq[i,] <- sapply(1:dim(s_R80pi)[1], function(it) rsq(s_R80pi[it,], m_R80pi[it,]))
     YrYr_rsq[i,] <- sapply(1:dim(s_YrYri)[1], function(it) rsq(s_YrYri[it,], m_YrYri[it,]))
-    # SL_rsq[i,] <- sapply(1:dim(s_SLi)[1], function(it) rsq(s_SLi[it,], m_SLi[it,]))
 
     # MAPE
     RRI_mape[i,] <- sapply(1:dim(s_RRIi)[1], function(it) mape(s_RRIi[it,], m_RRIi[it,]))
     R80p_mape[i,] <- sapply(1:dim(s_R80pi)[1], function(it) mape(s_R80pi[it,], m_R80pi[it,]))
     YrYr_mape[i,] <- sapply(1:dim(s_YrYri)[1], function(it) mape(s_YrYri[it,], m_YrYri[it,]))
-    # SL_mape[i,] <- sapply(1:dim(s_SLi)[1], function(it) mape(s_SLi[it,], m_SLi[it,]))
 
     # RMSE
     RRI_rmse[i,] <- sapply(1:dim(s_RRIi)[1], function(it) rmse(s_RRIi[it,], m_RRIi[it,]))
     R80p_rmse[i,] <- sapply(1:dim(s_R80pi)[1], function(it) rmse(s_R80pi[it,], m_R80pi[it,]))
     YrYr_rmse[i,] <- sapply(1:dim(s_YrYri)[1], function(it) rmse(s_YrYri[it,], m_YrYri[it,]))
-    # SL_rmse[i,] <- sapply(1:dim(s_SLi)[1], function(it) rmse(s_SLi[it,], m_SLi[it,]))
 
     # nTS - the fraction of time series for which a recovery indicator could be derived (thus not a NA value)
     RRI_nTS[i,] <- apply(m_RRIi, 1, function(x){sum(is.na(x)==F)/length(x)})
     R80p_nTS[i,] <- apply(m_R80pi, 1, function(x){sum(is.na(x)==F)/length(x)})
     YrYr_nTS[i,] <- apply(m_YrYri, 1, function(x){sum(is.na(x)==F)/length(x)})
-    # SL_nTS[i,] <- apply(m_SLi, 1, function(x){sum(is.na(x)==F)/length(x)})
 
   }
 
   RRI_rsqDF <- toDF(RRI_rsq, names(parvr), 'RRI', funSet)
   R80p_rsqDF <- toDF(R80p_rsq, names(parvr), 'R80p', funSet)
   YrYr_rsqDF <- toDF(YrYr_rsq, names(parvr), 'YrYr', funSet)
-  # SL_rsqDF <- toDF(SL_rsq, names(parvr), 'SL', funSet$freq, funSet$input, funSet$nPostMin, funSet$seas)
 
   RRI_mapeDF <- toDF(RRI_mape, names(parvr), 'RRI', funSet)
   R80p_mapeDF <- toDF(R80p_mape, names(parvr), 'R80p', funSet)
   YrYr_mapeDF <- toDF(YrYr_mape, names(parvr), 'YrYr', funSet)
-  # SL_mapeDF <- toDF(SL_mape, names(parvr), 'SL', funSet$freq, funSet$input, funSet$nPostMin, funSet$seas)
 
   RRI_rmseDF <- toDF(RRI_rmse, names(parvr), 'RRI', funSet)
   R80p_rmseDF <- toDF(R80p_rmse, names(parvr), 'R80p', funSet)
   YrYr_rmseDF <- toDF(YrYr_rmse, names(parvr), 'YrYr', funSet)
-  # SL_rmseDF <- toDF(SL_rmse, names(parvr), 'SL', funSet$freq, funSet$input, funSet$nPostMin, funSet$seas)
 
   RRI_nTSDF <- toDF(RRI_nTS, names(parvr), 'RRI', funSet)
   R80p_nTSDF <- toDF(R80p_nTS, names(parvr), 'R80p', funSet)
   YrYr_nTSDF <- toDF(YrYr_nTS, names(parvr), 'YrYr', funSet)
-  # SL_nTSDF <- toDF(SL_nTS, names(parvr), 'SL', funSet$freq, funSet$input, funSet$nPostMin, funSet$seas)
 
   # Save the performance indicators (if desired)
   save_results = (ofolder != '')
@@ -367,22 +391,18 @@ evalParam <- function(evr, sttngs, funSet, basename, ofolder = '') {
     save(RRI_rsqDF, file = file.path(ofolder, paste0(basename, '_RRI_R2_' , evr, '.rda')))
     save(R80p_rsqDF, file = file.path(ofolder, paste0(basename, '_R80p_R2_' , evr, '.rda')))
     save(YrYr_rsqDF, file = file.path(ofolder, paste0(basename, '_YrYr_R2_' , evr, '.rda')))
-    # save(SL_rsqDF, file = file.path(ofolder, paste0(basename, '_SL_R2_' , evr, '.rda')))
 
     save(RRI_rmseDF, file = file.path(ofolder, paste0(basename, '_RRI_RMSE_' , evr, '.rda')))
     save(R80p_rmseDF, file = file.path(ofolder, paste0(basename, '_R80p_RMSE_' , evr, '.rda')))
     save(YrYr_rmseDF, file = file.path(ofolder, paste0(basename, '_YrYr_RMSE_' , evr, '.rda')))
-    # save(SL_rmseDF, file = file.path(ofolder, paste0(basename, '_SL_RMSE_' , evr, '.rda')))
 
     save(RRI_mapeDF, file = file.path(ofolder, paste0(basename, '_RRI_MAPE_' , evr, '.rda')))
     save(R80p_mapeDF, file = file.path(ofolder, paste0(basename, '_R80p_MAPE_' , evr, '.rda')))
     save(YrYr_mapeDF, file = file.path(ofolder, paste0(basename, '_YrYr_MAPE_' , evr, '.rda')))
-    # save(SL_mapeDF, file = file.path(ofolder, paste0(basename, '_SL_MAPE_' , evr, '.rda')))
 
     save(RRI_nTSDF, file = file.path(ofolder, paste0(basename, '_RRI_nTS_' , evr, '.rda')))
     save(R80p_nTSDF, file = file.path(ofolder, paste0(basename, '_R80p_nTS_' , evr, '.rda')))
     save(YrYr_nTSDF, file = file.path(ofolder, paste0(basename, '_YrYr_nTS_' , evr, '.rda')))
-    # save(SL_nTSDF, file = file.path(ofolder, paste0(basename, '_SL_nTS_' , evr, '.rda')))
   }
 
   # Output the performance indicators

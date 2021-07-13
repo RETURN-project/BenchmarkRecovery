@@ -20,14 +20,16 @@ library(plyr)
 ```
 
 ```{r load-data}
-# inputs
-# input folder
-ifolder <- '../data/'#'/home/wanda/Documents/data/benchmarkRecovery/Run_20201016_expRecPeriod/'#ifolder <- '/home/wanda/Documents/data/benchmarkRecovery/Run_20201005_4steps/'#'../data/'#ifolder <- '/home/wanda/Documents/data/benchmarkRecovery/Run_20201005_4steps/'
+# user inputs
+# input folder - folder where sampled time series are located
+ifolder <- '../data/'
 # Folder where outputs will be written
-ofolder <- '../data/'#'/home/wanda/Documents/data/benchmarkRecovery/Run_20201016_expRecPeriod/Figures/'#ofolder <-'/home/wanda/Documents/data/benchmarkRecovery/Run_20201005_4steps/Figures'#'../data/' #ofolder <- '/home/wanda/Documents/data/benchmarkRecovery/Run_20201005_4steps/Figures'
+ofolder <- '../data/'
 # Name of the input dataset
 basename <- 'LSTS_RndmSample_NoFire_5_Tree_80_scl_30_npnt_20000_VI' 
-caseList <- c('seasAmp','remSd','distT','distRec','missVal','distMag')# 'distMag',evaluated time series characteristics for 
+# Time series parameters that are evaluated. SeasAmp stands for seasonal amplitude; remSD for noise magnitude; 
+# distT for timing of the disturbance; distRec for recovery half time; missVal for missing values; distMag for disturbance magnitude
+caseList <- c('seasAmp','remSd','distT','distRec','missVal','distMag')#
 
 ```
 
